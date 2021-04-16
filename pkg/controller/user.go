@@ -1,12 +1,12 @@
 package controller
 
 import (
-	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi"
 	"github.com/rikakobayashi/go-mvc-architecture/pkg/model"
+	"github.com/rikakobayashi/go-mvc-architecture/pkg/presenter"
 	"github.com/rikakobayashi/go-mvc-architecture/pkg/view"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -24,41 +24,52 @@ func init() {
 
 func UserIndex(w http.ResponseWriter, r *http.Request) {
 	var users []model.User
-	db.Find(&users)
-	u := view.Users(&users)
-	e := json.NewEncoder(w)
-	if err := e.Encode(u); err != nil {
-		fmt.Println(err)
-		return
+	err := db.Find(&users).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			presenter.ErrorNotFound(w, err)
+			return
+		} else {
+			presenter.Error(w, err)
+			return
+		}
 	}
+	presenter.Response(w, view.Users(users))
 }
 
 func User(w http.ResponseWriter, r *http.Request) {
 	var user model.User
 	id := chi.URLParam(r, "id")
-	db.Find(&user, id)
+
+	err := db.First(&user, id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			presenter.ErrorNotFound(w, err)
+			return
+		} else {
+			presenter.Error(w, err)
+			return
+		}
+	}
+
 	u := view.User{
-		Id: user.ID,
-		Name: user.Name,
+		ID:    user.ID,
+		Name:  user.Name,
 		Email: user.Email,
 	}
-	e := json.NewEncoder(w)
-	if err := e.Encode(u); err != nil {
-		fmt.Println(err)
-		return
-	}
+	presenter.Response(w, u)
 }
 
-func UserNew(w http.ResponseWriter, r *http.Request) {
+func CreateUser(w http.ResponseWriter, r *http.Request) {
 	user := model.User{
-		Name: r.FormValue("name"),
+		Name:  r.FormValue("name"),
 		Email: r.FormValue("email"),
 	}
-	result := db.Create(&user)
-	
-	err := result.Error
+
+	err := db.Create(&user).Error
 	if err != nil {
-		fmt.Println(err)
+		presenter.Error(w, err)
 		return
 	}
+	presenter.Response(w, user)
 }
